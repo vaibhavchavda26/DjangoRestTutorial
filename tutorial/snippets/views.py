@@ -1,41 +1,117 @@
-from django.http import HttpResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.parsers import JSONParser
-from snippets.models import Snippets
-from snippets.serializers import SnippetSerializer
 
-def snippet_list(request):
-    if request.method == 'GET':
+#class-based Views
+"""
+import pkg_resources
+from rest_framework import status
+from django.http import Http404
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import Snippets
+from .serializers import SnippetSerializer
+
+class SnippetList(APIView):
+    def get(self, request, format=None):
         snippets = Snippets.objects.all()
-        serializer = SnippetSerializer(snippets, many = True)
-        return JsonResponse(serializer.data, safe = False)
+        serializer = SnippetSerializer(snippets, many=True)
+        return Response(serializer.data)
 
-    elif request.method == 'POST':
-        data = JSONParser().parse(request)
-        serializer = SnippetSerializer(data = data)
+    def post(self,request, format=None):
+        serializer = SnippetSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return JsonResponse(serializer.data, stats = 201)
-        return JsonResponse(serializer.errors, status = 400)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-def snippet_detail(request, pk):
-    try:
-        snippet = Snippets.objects.get(id = pk)
-    except Snippets.DoesNotExist:
-        return HttpResponse(status = 400)
 
-    if request.method == 'GET':
-        seriliazer = SnippetSerializer(snippet)
-        return JsonResponse(seriliazer.data)
+class SnippetDetail(APIView):
+    def get_object(self, pk):
+        try:
+            return Snippets.objects.get(pk=pk)
+        except Snippets.DoesNotExist:
+            return Http404
 
-    elif request.method == 'PUT':
-        data = JSONParser().parse(request)
-        seriliazer = SnippetSerializer(snippet, data = data)
-        if seriliazer.is_valid():
-            seriliazer.save()
-            return JsonResponse(seriliazer.data)
-        return JsonResponse(seriliazer.errors, status = 400)
+    def get(self, request, pk, format=None):
+        snippet = self.get_object(pk)
+        serializer = SnippetSerializer(snippet)
+        return Response(serializer.data)
 
-    elif request.method == 'DELETE':
+    def put(self, request, pk, format=None):
+        snippet = self.get_object(pk)
+        serializer = SnippetSerializer(snippet, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, format=None):
+        snippet = self.get_object(pk)
         snippet.delete()
-        return JsonResponse(status = 204)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+"""
+
+#Using mixins
+"""
+from . models import Snippets
+from . serializers import SnippetSerializer
+from rest_framework import mixins
+from rest_framework import generics
+
+class SnippetList(mixins.ListModelMixin, mixins.CreateModelMixin, generics.GenericAPIView):
+    queryset = Snippets.objects.all()
+    serializer_class = SnippetSerializer
+
+    def get(self, request, *args, **kwargs):
+        return self.list(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        return self.create(request, *args, **kwargs)
+
+class SnippetDetail(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.DestroyModelMixin, generics.GenericAPIView):
+    queryset = Snippets.objects.all()
+    serializer_class = SnippetSerializer
+
+    def get(self, request, *args, **kwargs):
+        return self.retrieve(request, *args, **kwargs)
+
+    def put(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def delete(self, request, *args, **kwargs):
+        return self.delete(request, *args, **kwargs)
+"""
+
+#Using generic class-based views
+from .models import Snippets
+from .serializers import SnippetSerializer, UserSerializer
+from rest_framework import generics
+from snippets.permissions import IsOwnerOrReadOnly
+from rest_framework import permissions
+
+class SnippetList(generics.ListCreateAPIView):
+    queryset = Snippets.objects.all()
+    serializer_class = SnippetSerializer
+
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+class SnippetDetail(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Snippets.objects.all()
+    serializer_class = SnippetSerializer
+
+#Adding endpoints for our User model
+from django.contrib.auth.models import User
+
+class UserList(generics.ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+class UserDetail(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+#adding required permissions to views
+from rest_framework import permissions
+
+permission_classes = [permissions.IsAuthenticatedOrReadOnly]
