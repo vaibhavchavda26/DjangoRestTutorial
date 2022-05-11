@@ -81,12 +81,14 @@ class SnippetDetail(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, mixins.D
 """
 
 #Using generic class-based views
+from requests import Response
 from .models import Snippets
 from .serializers import SnippetSerializer, UserSerializer
 from rest_framework import generics
 from snippets.permissions import IsOwnerOrReadOnly
 from rest_framework import permissions
 
+"""
 class SnippetList(generics.ListCreateAPIView):
     queryset = Snippets.objects.all()
     serializer_class = SnippetSerializer
@@ -99,8 +101,10 @@ class SnippetList(generics.ListCreateAPIView):
 class SnippetDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Snippets.objects.all()
     serializer_class = SnippetSerializer
+"""
 
 #Adding endpoints for our User model
+"""
 from django.contrib.auth.models import User
 
 class UserList(generics.ListAPIView):
@@ -110,8 +114,62 @@ class UserList(generics.ListAPIView):
 class UserDetail(generics.RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+"""
 
 #adding required permissions to views
 from rest_framework import permissions
-
 permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+#creating endpoints for the root of our API
+"""
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
+
+@api_view(['GET'])
+def api_root(request, format=None):
+    return Response({
+        'users': reverse('user-list', request=request, format=format),
+        'snippets': reverse('snippet-list', request=request, format=format)
+    })
+"""
+
+#creating an endpoints for highlighted snippets
+"""
+from rest_framework import renderers
+
+class SnippetHighlight(generics.GenericAPIView):
+    queryset = Snippets.objects.all()
+    renderer_classes = [renderers.StaticHTMLRenderer]
+
+    def get(self, request, *args, **kwargs):
+        snippet = self.get_object() 
+        return Response(snippet.highlighted)
+"""
+
+#ViewSets
+from django.contrib.auth.models import User
+from rest_framework import viewsets
+
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import permissions
+from rest_framework import renderers
+
+class SnippetViewSet(viewsets.ModelViewSet):
+    queryset = Snippets.objects.all()
+    serializer_class = SnippetSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    @action(detail=True, renderer_classes= [renderers.StaticHTMLRenderer])
+    def heighlight(self,request, *args, **kwargs):
+        snippet = self.get_object()
+        return Response(snippet.highlight)
+
+    def perform_create(self, serializer):
+        serializer.save(owner = self.request.user)
